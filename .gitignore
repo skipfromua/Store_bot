@@ -1,0 +1,10 @@
+#logs
+log.txt
+
+.idea/
+venv/
+__pycache__
+
+#bot_configure
+config.py
+
