@@ -3,14 +3,16 @@ from config import TOKEN
 from telebot import types
 from DataBase import *
 from log import log_error_decorator
+from text import *
 
 bot = telebot.TeleBot(token=TOKEN)
 
 
-@log_error_decorator
 @bot.message_handler(commands=['start'])
+@log_error_decorator
 def start(message):
-    create_user_for_carma(message.from_user.id, message.from_user.first_name, message.from_user.last_name)
+    last_name = correct_last_name(message.from_user.last_name)
+    create_user_for_carma(message.from_user.id, message.from_user.first_name, last_name)
     auth(message)
     if users_db.find_one({'user_id': message.chat.id})['phone_number'] \
             or message.chat.username:
@@ -21,20 +23,28 @@ def start(message):
         get_phone(message)
 
 
+@bot.message_handler(commands=['help'])
 @log_error_decorator
+def help(message):
+    bot.send_message(message.chat.id, HELP_TEXT)
+
+
 @bot.message_handler(content_types=['contact'])
+@log_error_decorator
 def test(message):
     clear_markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, 'UHUUU', reply_markup=clear_markup)
+    bot.send_message(message.chat.id, 'ОК!', reply_markup=clear_markup)
     if message.chat.id == message.contact.user_id:
         modify_phone_number(message.chat.id, message.contact.phone_number)
+        start_point(message)
     else:
         bot.send_message(message.chat.id, 'Это не ваш контакт. Для корректной работы - отправьте свой.')
 
 
-@log_error_decorator
 @bot.callback_query_handler(func=lambda call: True)
+@log_error_decorator
 def callback_inline(call):
+    last_name = correct_last_name(call.message.chat.last_name)
     if call.message:
         if call.data == 'i_need':
             if not queue_db.find_one({'queued_id': call.from_user.id}) in queue_db.find() and not clients_db.find_one(
@@ -70,21 +80,21 @@ def callback_inline(call):
                 if call.from_user.username:  # this func to rewrite
                     bot.send_message(order_id,
                                      text='Ваш заказ принял ' + call.from_user.first_name + ' ' +
-                                          call.from_user.last_name + ' (@' + call.from_user.username + ')')
+                                          last_name + ' (@' + call.from_user.username + ')')
                 else:
                     bot.send_message(order_id,
                                      text='Ваш заказ принял ' + call.from_user.first_name + ' ' +
-                                          call.from_user.last_name)
+                                          last_name)
                     bot.send_contact(order_id, users_db.find_one({'user_id': call.message.chat.id})['phone_number'],
-                                     call.message.chat.first_name, call.message.chat.last_name)
+                                     call.message.chat.first_name, last_name)
 
-                if bot.get_chat_member(call.message.chat.id, order_id).user.username:
-                    bot.send_message(call.message.chat.id, 'Вы приняли заказ @' +
-                                     bot.get_chat_member(call.message.chat.id, order_id).user.username)
+                if bot.get_chat_member(order_id, order_id).user.username:
+                    bot.send_message(order_id, 'Вы приняли заказ @' +
+                                     bot.get_chat_member(order_id, order_id).user.username)
                 else:
                     bot.send_contact(call.message.chat.id, clients_db.find_one({'user_id': order_id})['phone_number'],
-                                     bot.get_chat_member(call.message.chat.id, order_id).user.first_name,
-                                     bot.get_chat_member(call.message.chat.id, order_id).user.last_name)
+                                     bot.get_chat_member(order_id, order_id).user.first_name,
+                                     bot.get_chat_member(order_id, order_id).user.last_name)
                 delete_user(order_id)
                 modify_carma_and_orders(call.from_user.id,
                                         users_db.find_one({'user_id': call.message.chat.id})['carma_points'],
@@ -121,13 +131,14 @@ def callback_inline(call):
                                       'обновите список заказов, нажав кнопку "Я в магазине..."')
 
 
-@log_error_decorator
 @bot.message_handler(content_types=['text'])
+@log_error_decorator
 def request(message):
+    last_name = correct_last_name(message.from_user.last_name)
     if users_db.find_one({'user_id': message.from_user.id})['phone_number'] or message.from_user.username:
         if queue_db.find_one({'queued_id': message.from_user.id}) in queue_db.find():
             create_user(message.from_user.id, message.from_user.first_name,
-                        message.from_user.last_name, message.text,
+                        last_name, message.text,
                         users_db.find_one({'user_id': message.from_user.id})['phone_number'])
             remove_from_queue(message.from_user.id)
             bot.send_message(message.from_user.id, text='Вы сдедали заказ, ожидайте.')
@@ -141,7 +152,7 @@ def request(message):
 
 def auth(message):
     clear_markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, 'Привет, ...', reply_markup=clear_markup)
+    bot.send_message(message.chat.id, 'Привет!!! Если нужна инструкция, нажми сюда /help', reply_markup=clear_markup)
 
 
 def start_point(message):
@@ -152,7 +163,7 @@ def start_point(message):
     keyboard.add(callback_need)
     keyboard.add(callback_there)
     keyboard.add(callback_cancel)
-    bot.send_message(message.chat.id, 'hello world', reply_markup=keyboard)
+    bot.send_message(message.chat.id, 'Выбери нужное из списка:', reply_markup=keyboard)
 
 
 def confirm(client_id, helper_id):
@@ -183,4 +194,10 @@ def get_phone(message):
     bot.send_message(message.chat.id, "Мой контакт:", reply_markup=keyboard)
 
 
-bot.polling()
+def correct_last_name(last_name):
+    if not last_name:
+        l_name = ''
+    else:
+        l_name = last_name
+    return l_name
+

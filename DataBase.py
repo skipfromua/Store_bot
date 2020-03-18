@@ -1,4 +1,5 @@
 import pymongo
+import time
 
 client = pymongo.MongoClient(
     'mongodb://StoreAdmin:nimdAerotS213@ds125479.mlab.com:25479/heroku_zmq98kdk?retryWrites=false')
@@ -8,12 +9,16 @@ queue_db = client.get_database()["queue_db"]
 
 
 def data_base_error_decorator(func):
-    def wrapper():
+    def wrapper(*args):
         try:
-            func()
-        except:
-            print('Data base error')
-            raise 
+            func(*args)
+        except TimeoutError:
+            with open('log.txt', 'a') as log:
+                log.write(time.ctime() + ' Data base timeout error\n')
+        except Exception:
+            with open('log.txt', 'a') as log:
+                log.write(time.ctime() + ' Other data base error\n')
+    return wrapper
 
 @data_base_error_decorator
 def create_queue(id):
